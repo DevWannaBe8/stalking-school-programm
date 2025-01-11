@@ -1,18 +1,28 @@
 import socket
 import time
+import platform  # Zum Abrufen des PC-Namens
+
+def get_pc_name():
+    """Gibt den Namen des PCs zurück."""
+    return platform.node()  # Holt den Hostnamen des PCs
 
 def connect_to_server(server_ip):
-    """Send the client's IP address to the server."""
+    """Sendet die IP-Adresse, den PC-Namen und den Programmstatus an den Server."""
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((server_ip, 123456)) # Server ip u can change it to whatever you want 
+    client_socket.connect((server_ip, 12345))
 
-    # Send the client's IP address to the server
+    # Holen des PC-Namens und Setzen des Status (Programm läuft im Hintergrund)
     client_ip = socket.gethostbyname(socket.gethostname())
-    client_socket.send(client_ip.encode())
+    pc_name = get_pc_name()
+    program_status = "Active"  # Das Programm läuft, wenn dieses Skript ausgeführt wird
+
+    # Sende die relevanten Daten an den Server
+    client_socket.send(f"{client_ip},{pc_name},{program_status}".encode())
 
     while True:
-        time.sleep(10)  # Send IP address every 10 seconds (keep alive)
+        time.sleep(10)  # Sende alle 10 Sekunden eine Statusmeldung
+        client_socket.send(f"{client_ip},{pc_name},{program_status}".encode())
 
-# Replace with the main PC's IP address
-server_ip = "________________YOUR IP ADRESS______________"  # MAIN IP ADRESS YOU CAN GET IT WITH cmd command ipconfig ip4v or smt
+# Ersetze dies mit der IP des Haupt-PCs
+server_ip = "192.168.2.193"  # Haupt-PC IP-Adresse
 connect_to_server(server_ip)
