@@ -21,8 +21,8 @@ class ClientManagerApp:
         
         self.tree.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-        # Sample clients list (this would be dynamically updated)
-        self.connected_clients = []
+        # Dictionary to store client data with IP as key
+        self.client_data = {}
 
     def add_client(self, client_ip, country, user_status, connection_status, user_pc):
         """Add new client details to the treeview."""
@@ -44,13 +44,22 @@ class ClientManagerApp:
             client_socket, client_address = server_socket.accept()
             print(f"Verbindung von {client_address}")
             client_ip = client_address[0]
-            # Simulate adding additional data (can be dynamic based on actual client data)
-            country = "Germany"  # Placeholder, replace with actual lookup if needed
-            user_status = "Active"  # Placeholder (could be based on activity)
-            connection_status = "Connected"
-            user_pc = f"User@{client_ip}"  # Placeholder, replace with actual user info
             
-            self.add_client(client_ip, country, user_status, connection_status, user_pc)
+            # Empfange die Client-Daten (IP, PC-Name, Programmstatus)
+            data = client_socket.recv(1024).decode()
+            client_ip, pc_name, program_status = data.split(',')
+
+            # Simuliere Land (dies könnte durch GeoIP ermittelt werden)
+            country = "Germany"  # Platzhalter für Land
+            user_status = "Active" if program_status == "Active" else "Inactive"
+            connection_status = "Connected" if program_status == "Active" else "Disconnected"
+            user_pc = f"{pc_name}@{client_ip}"
+
+            # Aktualisiere oder füge den Client in die Tabelle ein
+            if client_ip not in self.client_data:
+                self.add_client(client_ip, country, user_status, connection_status, user_pc)
+            else:
+                self.update_client_status(client_ip, country, user_status, connection_status, user_pc)
 
             threading.Thread(target=self.handle_client, args=(client_socket, client_address, client_ip)).start()
 
@@ -65,7 +74,7 @@ class ClientManagerApp:
             except:
                 break
 
-        # Once client disconnects, update the status
+        # Wenn der Client die Verbindung trennt, aktualisiere den Status
         print(f"Client {client_ip} disconnected.")
         self.update_client_status(client_ip, "Germany", "Inactive", "Disconnected", f"User@{client_ip}")
         client_socket.close()
