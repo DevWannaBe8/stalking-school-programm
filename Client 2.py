@@ -1,28 +1,44 @@
 import socket
-import time
-import platform  # Zum Abrufen des PC-Namens
+import platform
+import os
 
-def get_pc_name():
-    """Gibt den Namen des PCs zurück."""
-    return platform.node()  # Holt den Hostnamen des PCs
+class Client:
+    def __init__(self, server_ip='127.0.0.1', server_port=65432):
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.client_socket.connect((self.server_ip, self.server_port))
 
-def connect_to_server(server_ip):
-    """Sendet die IP-Adresse, den PC-Namen und den Programmstatus an den Server."""
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect((server_ip, 12345))
+    def send_message(self, message):
+        """Sendet eine Nachricht an den Server"""
+        self.client_socket.send(message.encode('utf-8'))
 
-    # Holen des PC-Namens und Setzen des Status (Programm läuft im Hintergrund)
-    client_ip = socket.gethostbyname(socket.gethostname())
-    pc_name = get_pc_name()
-    program_status = "Active"  # Das Programm läuft, wenn dieses Skript ausgeführt wird
+    def listen_for_commands(self):
+        """Hört auf Befehle vom Server und führt diese aus"""
+        while True:
+            try:
+                message = self.client_socket.recv(1024).decode('utf-8')
+                if message == "systeminfo":
+                    info = f"OS: {platform.system()} {platform.release()}, IP: {self.get_ip()}"
+                    self.client_socket.send(info.encode('utf-8'))
+                elif message == "standby":
+                    os.system("shutdown -h now")  # Standby-Befehl
+                elif message == "restart":
+                    os.system("shutdown /r /f /t 0")  # Neustart-Befehl
+                elif message == "disconnect":
+                    break
+                elif message == "uninstall":
+                    self.client_socket.send("Deinstalliere Programm...".encode('utf-8'))
+                    break
+            except Exception as e:
+                print(f"Fehler: {e}")
+                break
+        self.client_socket.close()
 
-    # Sende die relevanten Daten an den Server
-    client_socket.send(f"{client_ip},{pc_name},{program_status}".encode())
+    def get_ip(self):
+        """Holt die IP des Clients"""
+        return os.popen('ipconfig getifaddr en0').read().strip()
 
-    while True:
-        time.sleep(10)  # Sende alle 10 Sekunden eine Statusmeldung
-        client_socket.send(f"{client_ip},{pc_name},{program_status}".encode())
-
-# Ersetze dies mit der IP des Haupt-PCs
-server_ip = "192.168.2.193"  # Haupt-PC IP-Adresse
-connect_to_server(server_ip)
+if __name__ == "__main__":
+    client = Client()
+    client.listen_for_commands()
