@@ -1,91 +1,146 @@
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 import socket
 import threading
-from tkinter import messagebox
+import platform
 
-class ClientManagerApp:
-    def __init__(self, root):
-        self.root = root
+
+class Server:
+    def __init__(self, host='127.0.0.1', port=65432):
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind((host, port))
+        self.server_socket.listen(5)
+        self.clients = []  # Liste der Clients (Verbindungen)
+        self.root = tk.Tk()
         self.root.title("Client Manager")
-
-        # Treeview to show clients and additional information
-        self.tree = ttk.Treeview(root, columns=("IP", "Country", "User Status", "Connection Status", "User@PC"), show="headings")
         
-        # Define the column headings
+        self.tree = ttk.Treeview(self.root, columns=("IP", "Country", "User Status", "Connection Status", "User@PC"), show="headings")
         self.tree.heading("IP", text="IP Adresse")
         self.tree.heading("Country", text="Land")
         self.tree.heading("User Status", text="Benutzerstatus")
         self.tree.heading("Connection Status", text="Verbindungsstatus")
         self.tree.heading("User@PC", text="User@PC")
-        
         self.tree.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-        # Dictionary to store client data with IP as key
-        self.client_data = {}
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Systeminformationen", command=self.show_system_info)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="PC in Standby", command=self.pc_standby)
+        self.context_menu.add_command(label="PC Neustarten", command=self.pc_restart)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Nachricht senden", command=self.show_message_box)
+        self.context_menu.add_command(label="Remote Desktop starten", command=self.remote_desktop)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Trennen", command=self.disconnect_client)
+        self.context_menu.add_command(label="Reconnect", command=self.reconnect_client)
+        self.context_menu.add_command(label="Deinstallieren", command=self.uninstall_client)
 
-    def add_client(self, client_ip, country, user_status, connection_status, user_pc):
-        """Add new client details to the treeview."""
-        self.tree.insert("", "end", values=(client_ip, country, user_status, connection_status, user_pc))
+        self.tree.bind("<Button-3>", self.show_context_menu)
 
-    def update_client_status(self, client_ip, country, user_status, connection_status, user_pc):
-        """Update an existing client's details in the treeview."""
-        for item in self.tree.get_children():
-            if self.tree.item(item, "values")[0] == client_ip:
-                self.tree.item(item, values=(client_ip, country, user_status, connection_status, user_pc))
+    def show_context_menu(self, event):
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.context_menu.post(event.x_root, event.y_root)
 
-    def start_server(self):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind(("0.0.0.0", 12345))  # Bind to all available IPs
-        server_socket.listen(5)
-        print("Server läuft und wartet auf Verbindungen...")
-
-        while True:
-            client_socket, client_address = server_socket.accept()
-            print(f"Verbindung von {client_address}")
-            client_ip = client_address[0]
-            
-            # Empfange die Client-Daten (IP, PC-Name, Programmstatus)
-            data = client_socket.recv(1024).decode()
-            client_ip, pc_name, program_status = data.split(',')
-
-            # Simuliere Land (dies könnte durch GeoIP ermittelt werden)
-            country = "Germany"  # Platzhalter für Land
-            user_status = "Active" if program_status == "Active" else "Inactive"
-            connection_status = "Connected" if program_status == "Active" else "Disconnected"
-            user_pc = f"{pc_name}@{client_ip}"
-
-            # Aktualisiere oder füge den Client in die Tabelle ein
-            if client_ip not in self.client_data:
-                self.add_client(client_ip, country, user_status, connection_status, user_pc)
-            else:
-                self.update_client_status(client_ip, country, user_status, connection_status, user_pc)
-
-            threading.Thread(target=self.handle_client, args=(client_socket, client_address, client_ip)).start()
-
-    def handle_client(self, client_socket, client_address, client_ip):
-        """Handle communication with the connected client."""
-        while True:
-            try:
-                message = client_socket.recv(1024).decode()
-                if not message:
-                    break
-                print(f"Nachricht von {client_address}: {message}")
-            except:
+    def show_system_info(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        for client_socket, client_address in self.clients:
+            if client_address[0] == client_ip:
+                client_socket.send("systeminfo".encode('utf-8'))
+                response = client_socket.recv(1024).decode('utf-8')
+                messagebox.showinfo("Systeminformationen", response)
                 break
 
-        # Wenn der Client die Verbindung trennt, aktualisiere den Status
-        print(f"Client {client_ip} disconnected.")
-        self.update_client_status(client_ip, "Germany", "Inactive", "Disconnected", f"User@{client_ip}")
+    def pc_standby(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        for client_socket, client_address in self.clients:
+            if client_address[0] == client_ip:
+                client_socket.send("standby".encode('utf-8'))
+                messagebox.showinfo("Aktion", f"PC {client_ip} in Standby versetzen...")
+                break
+
+    def pc_restart(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        for client_socket, client_address in self.clients:
+            if client_address[0] == client_ip:
+                client_socket.send("restart".encode('utf-8'))
+                messagebox.showinfo("Aktion", f"PC {client_ip} wird neu gestartet...")
+                break
+
+    def show_message_box(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        messagebox.showinfo("Nachricht senden", f"Nachricht an {client_ip} senden...")
+
+    def remote_desktop(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        messagebox.showinfo("Remote Desktop", f"Starte Remote Desktop zu {client_ip}...")
+
+    def disconnect_client(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        for client_socket, client_address in self.clients:
+            if client_address[0] == client_ip:
+                client_socket.send("disconnect".encode('utf-8'))
+                messagebox.showinfo("Verbindung trennen", f"Client {client_ip} wird getrennt...")
+                break
+
+    def reconnect_client(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        for client_socket, client_address in self.clients:
+            if client_address[0] == client_ip:
+                client_socket.send("reconnect".encode('utf-8'))
+                messagebox.showinfo("Verbindung wiederherstellen", f"Stelle Verbindung zu {client_ip} wieder her...")
+                break
+
+    def uninstall_client(self):
+        selected_item = self.tree.selection()
+        client_ip = self.tree.item(selected_item, "values")[0]
+        for client_socket, client_address in self.clients:
+            if client_address[0] == client_ip:
+                client_socket.send("uninstall".encode('utf-8'))
+                messagebox.showinfo("Deinstallation", f"Deinstalliere das Programm von {client_ip}...")
+                break
+
+    def handle_client(self, client_socket, client_address):
+        self.clients.append((client_socket, client_address))
+        while True:
+            try:
+                message = client_socket.recv(1024).decode('utf-8')
+                if not message:
+                    break
+
+                if message == "systeminfo":
+                    client_socket.send(f"OS: {platform.system()} {platform.release()}".encode('utf-8'))
+                elif message == "standby":
+                    client_socket.send("PC in Standby...".encode('utf-8'))
+                elif message == "restart":
+                    client_socket.send("PC wird neu gestartet...".encode('utf-8'))
+                elif message == "disconnect":
+                    client_socket.send("Verbindung wird getrennt...".encode('utf-8'))
+                    break
+                elif message == "reconnect":
+                    client_socket.send("Verbindung wird wiederhergestellt...".encode('utf-8'))
+                elif message == "uninstall":
+                    client_socket.send("Deinstalliere Programm...".encode('utf-8'))
+            except Exception as e:
+                break
         client_socket.close()
 
-# Setup the main window
-root = tk.Tk()
-app = ClientManagerApp(root)
+    def start_server(self):
+        print("Server gestartet und wartet auf Verbindungen...")
+        while True:
+            client_socket, client_address = self.server_socket.accept()
+            print(f"Verbindung von {client_address} hergestellt.")
+            threading.Thread(target=self.handle_client, args=(client_socket, client_address)).start()
 
-# Start server in a separate thread
-server_thread = threading.Thread(target=app.start_server)
-server_thread.daemon = True
-server_thread.start()
-
-root.mainloop()
+if __name__ == "__main__":
+    server = Server()
+    threading.Thread(target=server.start_server).start()
+    server.root.mainloop()
