@@ -3,7 +3,7 @@ import platform
 import os
 
 class Client:
-    def __init__(self, server_ip='127.0.0.1', server_port=65432):
+    def __init__(self, server_ip='YOUR IP !!!!!!!!', server_port=65432):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_ip = server_ip
         self.server_port = server_port
